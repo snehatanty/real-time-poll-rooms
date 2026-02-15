@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-Time Poll</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+
+</head>
+<body>
+
+<h2 id="question"></h2>
+<div id="options"></div>
+
+<script>
+
+    const pollId = new URLSearchParams(window.location.search).get("pollId");
+
+    function loadPoll() {
+        fetch(`/api/polls/${pollId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("question").innerText = data.question;
+
+                const optionsDiv = document.getElementById("options");
+                optionsDiv.innerHTML = "";
+
+                data.options.forEach(option => {
+                    const btn = document.createElement("button");
+                    btn.innerText = option.text + " (" + option.voteCount + ")";
+                    btn.onclick = () => vote(option.id);
+                    optionsDiv.appendChild(btn);
+                    optionsDiv.appendChild(document.createElement("br"));
+                });
+            });
+    }
+
+    function vote(optionId) {
+        fetch(`/api/polls/${pollId}/vote`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ optionId: optionId })
+        })
+        .then(res => res.text())
+        .then(alert);
+    }
+
+    // 🔥 WebSocket Connection
+    const socket = new SockJS('/ws');
+const stompClient = new StompJs.Client({
+    webSocketFactory: () => socket
+});
+
+stompClient.onConnect = () => {
+    stompClient.subscribe(`/topic/polls/${pollId}`, () => {
+        loadPoll();
+    });
+};
+
+stompClient.activate();
+
+
+    loadPoll();
+
+</script>
+
+</body>
+</html>
