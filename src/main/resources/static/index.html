@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Create Poll</title>
+  <style>
+    body { font-family: Arial; max-width: 700px; margin: 30px auto; }
+    input, button { padding: 10px; width: 100%; margin: 6px 0; box-sizing: border-box; }
+    .small { font-size: 12px; color: #555; }
+    .msg { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Create a Poll</h2>
+
+  <label>Question</label>
+  <input id="question" placeholder="Enter poll question..." />
+
+  <label>Expires At (optional)</label>
+  <input id="expiresAt" placeholder="YYYY-MM-DDTHH:mm:ss (example: 2026-12-31T23:59:00)" />
+  <div class="small">If you leave empty, poll won’t expire.</div>
+
+  <h3>Options (min 2)</h3>
+  <div id="options"></div>
+
+  <button type="button" onclick="addOption()">+ Add Option</button>
+  <button type="button" onclick="createPoll()">Create Poll</button>
+
+  <p id="msg" class="msg"></p>
+
+  <script>
+    const optionsDiv = document.getElementById("options");
+    const msg = document.getElementById("msg");
+
+    function addOption(value = "") {
+      const input = document.createElement("input");
+      input.placeholder = "Option text";
+      input.value = value;
+      optionsDiv.appendChild(input);
+    }
+
+    // Default 2 options
+    addOption();
+    addOption();
+
+    async function createPoll() {
+      msg.innerText = "";
+      const question = document.getElementById("question").value.trim();
+      const expiresAtRaw = document.getElementById("expiresAt").value.trim();
+
+      const options = Array.from(optionsDiv.querySelectorAll("input"))
+        .map(i => i.value.trim())
+        .filter(v => v.length > 0);
+
+      if (!question) { msg.innerText = "❌ Question is required."; return; }
+      if (options.length < 2) { msg.innerText = "❌ Add at least 2 options."; return; }
+
+      const body = {
+        question,
+        expiresAt: expiresAtRaw ? expiresAtRaw : null,
+        options
+      };
+
+      try {
+        const res = await fetch("/api/polls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+          msg.innerText = "❌ " + await res.text();
+          return;
+        }
+
+        // Backend returns pollId as plain text
+        const pollId = (await res.text()).replaceAll('"', '').trim();
+
+        msg.innerText = "✅ Poll created! Redirecting...";
+        window.location.href = `/poll.html?pollId=${encodeURIComponent(pollId)}`;
+      } catch (e) {
+        msg.innerText = "❌ Error: " + e;
+      }
+    }
+  </script>
+</body>
+</html>
