@@ -17,6 +17,9 @@ import com.sneha.realtimepoll.repository.VoteRepository;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/polls")
@@ -94,15 +97,46 @@ public class PollController {
     public ResponseEntity<?> vote(
             @PathVariable String pollId,
             @RequestBody VoteRequest request,
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
 
         String ip = httpRequest.getRemoteAddr();
+        
+     // ✅ Anti-abuse #2: one vote per browser using clientId cookie
+        String clientId = null;
+
+        Cookie[] cookies = httpRequest.getCookies();
+        if (cookies != null) {
+            for (Cookie c : cookies) {
+                if ("clientId".equals(c.getName())) {
+                    clientId = c.getValue();
+                    break;
+                }
+            }
+        }
+
+        // If cookie missing, create new clientId
+        if (clientId == null || clientId.isBlank()) {
+            clientId = UUID.randomUUID().toString();
+            Cookie cookie = new Cookie("clientId", clientId);
+            cookie.setPath("/");
+            cookie.setMaxAge(60 * 60 * 24 * 365); // 1 year
+            cookie.setHttpOnly(false);
+            httpResponse.addCookie(cookie);
+        }
+
 
         // Check duplicate vote
         if (voteRepository.existsByPoll_IdAndIpAddress(pollId, ip)) {
             return ResponseEntity.badRequest()
                     .body("You have already voted in this poll");
         }
+        
+        if (voteRepository.existsByPoll_IdAndSessionId(pollId, clientId)) {
+            return ResponseEntity.badRequest()
+                    .body("You have already voted in this poll (browser)");
+        }
+
 
         var option = optionRepository.findById(request.getOptionId());
 
@@ -133,10 +167,12 @@ public class PollController {
 
         // Save vote record
         Vote vote = new Vote();
+        vote.setSessionId(clientId);
         vote.setIpAddress(ip);
         vote.setVotedAt(LocalDateTime.now());
         vote.setPoll(selectedOption.getPoll());
         vote.setOption(selectedOption);
+        
 
         voteRepository.save(vote);
         
